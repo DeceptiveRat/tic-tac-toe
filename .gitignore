@@ -1,2 +1,4 @@
 *.swp
+*.txt
 debug.log
+.gdb_history
