@@ -69,7 +69,7 @@ int main(int argc, char **argv)
 						printf("==============================================================\n");
 						printf("i: %2d, j: %2d, k: %2d\n", i, j, k);
 						int8_t temp[9];
-						int hash = (i<<24)|(j<<16)|(k<<8)|0x00;
+						int hash = (i)|(j<<8)|(k<<16);
 						printf("board:\n");
 						unhash(&hash, temp);
 						printf("%-3d %8d %8d\n%-3d %8d %8d\n%-3d %8d %8d\n", temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8]);
@@ -200,15 +200,15 @@ int unhash(const int* hash, int8_t return_value[])
 		int8_t byte;
 		byte = indices[i]/(3*3);
 		byte--;
-		return_value[i*3] = byte;
+		return_value[(2-i)*3] = byte;
 
 		byte = (indices[i]/3)%3;
 		byte--;
-		return_value[i*3 + 1] = byte;
+		return_value[(2-i)*3 + 1] = byte;
 
 		byte = indices[i]%3;
 		byte--;
-		return_value[i*3 + 2] = byte;
+		return_value[(2-i)*3 + 2] = byte;
 	}
 
 	return 0;
@@ -219,6 +219,6 @@ bool setRMatrix(const int8_t current_state[], int8_t R_tensor[][27][27][9], int8
 	int hash = getHash(current_state);
 	if((hash&0xff000000) != 0x00)
 		return false;
-	memcpy(R_tensor[hash>>24][hash>>16][hash>>8],R_matrix, 9);
+	memcpy(R_tensor[(hash>>16)&0xff][(hash>>8)&0xff][(hash)&0xff],R_matrix, 9);
 	return true;
 }
