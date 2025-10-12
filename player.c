@@ -10,24 +10,45 @@
 #define PLAYER 1
 #define OPPONENT -1
 
-int trainMatrix(const int train_iteration);
+#define TRAINMODE_START 0xff
+#define TRAINMODE_RANDOMSTART 0x01
+
+#define TRAINQTENSOR_MODE 0xff
+#define TRAINQTENSOR_USEMAXQ 0x01
+#define TRAINQTENSOR_USEAVGQ 0x02
+
+int trainMode(const int train_iteration, const float gamma, const int Q_train_options, const int train_options);
+int trainQTensor(const int8_t current_state[], int Q_tensor[][27][27][9],
+				 const int8_t R_tensor[][27][27][2], const float gamma, const int options);
 void printHelp(const char *argv);
 int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][2]);
 bool isGameover(const int8_t current_state[], int8_t player);
-int getRValue(const int8_t current_state[], const int8_t R_tensor[][27][27][2], int8_t result[]);
+bool getRValue(const int8_t current_state[], const int8_t R_tensor[][27][27][2], int8_t result[]);
+bool getQMatrix(const int8_t current_state[], const int Q_tensor[][27][27][9], int result[]);
 int getHash(const int8_t current_state[]);
 int unhash(const int *hash, int8_t return_value[]);
 bool setRValue(const int8_t current_state[], int8_t R_tensor[][27][27][2], int8_t R_value[]);
+bool setQMatrix(const int8_t current_state[], int Q_tensor[][27][27][9], int Q_matrix[]);
 void printMatrix(const int8_t matrix[]);
-void resetMatrix(int8_t matrix[]);
+void resetMatrix(void* matrix, int length);
+int chooseRandom(const int8_t current_state[]);
+int chooseMaxQValue(const int8_t current_state[], const int Q_tensor[][27][27][9]);
+int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][27][27][9]);
+void setErr(int num);
+void resetErr();
+
+int errnum = 0;
 
 int main(int argc, char **argv)
 {
 	int opt;
 	int mode = 1;
-	int train_iteration = 5;
+	int train_iteration = 100;
+	float gamma = 0.5;
+	int Q_train_options = 0x01;
+	int train_options = 0x01;
 
-	while((opt = getopt(argc, argv, ":htc:")) != -1)
+	while((opt = getopt(argc, argv, ":htc:g:mar")) != -1)
 	{
 		switch(opt)
 		{
@@ -39,6 +60,17 @@ int main(int argc, char **argv)
 				break;
 			case 'c':
 				train_iteration = atoi(optarg);
+				break;
+			case 'g':
+				gamma = atof(optarg);
+			case 'm':
+				Q_train_options |= TRAINQTENSOR_USEMAXQ;
+				break;
+			case 'a':
+				Q_train_options |= TRAINQTENSOR_USEAVGQ;
+				break;
+			case 'r':
+				train_options |= TRAINMODE_RANDOMSTART;
 				break;
 			case '?':
 				printf("unknown option: %c\n", optopt);
@@ -53,18 +85,18 @@ int main(int argc, char **argv)
 	}
 	else if(mode == 1)
 	{
-		trainMatrix(train_iteration);
+		trainMode(train_iteration, gamma, Q_train_options, train_options);
 	}
 
 	return 0;
 }
 
-int trainMatrix(const int train_iteration)
+int trainMode(const int train_iteration, const float gamma, const int Q_train_options, const int train_options)
 {
 	int8_t R_tensor[27][27][27][2];
-	int8_t Q_tensor[27][27][27][9];
+	int Q_tensor[27][27][27][9];
 	memset(R_tensor, 0, 27 * 27 * 27 * 2);
-	memset(Q_tensor, 0, 27 * 27 * 27 * 9);
+	memset(Q_tensor, 0, 27 * 27 * 27 * 9*sizeof(int));
 
 	int8_t current_state[9] = {0};
 	// create R tensor
@@ -74,46 +106,197 @@ int trainMatrix(const int train_iteration)
 		exit(-1);
 	}
 
-	int count=0;
-	for(int i = 0;i<27;i++)
-	{
-		for(int j = 0;j<27;j++)
-		{
-			for(int k =0;k<27;k++)
-			{
-				if(R_tensor[i][j][k][0] != 0)
-				{
-					printf("==============================================================\n");
-					printf("i: %2d, j: %2d, k: %2d\n", i, j, k);
-					int8_t temp[9];
-					int hash = ((i<<16)|(j<<8)|(k))&0x00ffffff;
-					printf("board:\n");
-					unhash(&hash, temp);
-					printMatrix(temp);
-					printf("R value:%d, %d\n", R_tensor[i][j][k][0], R_tensor[i][j][k][1]);
-				}
-			}
-		}
-	}
-
-	printf("count: %d\n", count);
-
-
-/*
 	// training session
 	srand(time(NULL));
 	for(int i = 0; i < train_iteration; i++)
 	{
-		int r = rand() % 9;
-		current_state[r] = 1;
-		while(!isGameover(current_state, PLAYER) && !isGameover(current_state, OPPONENT))
+		int next_move;
+		printf("Starting game number[%d]:\n", i);
+		if((train_options&TRAINMODE_START)==TRAINMODE_RANDOMSTART)
 		{
+			int r = rand() % 9;
+			current_state[r] = 1;
+			printMatrix(current_state);
 		}
-		resetMatrix(current_state);
+		else
+		{
+			// player move
+			next_move = trainQTensor(current_state, Q_tensor, R_tensor, gamma, Q_train_options);
+			if(errnum)
+				return -1;
+			current_state[next_move] = PLAYER;
+			if(isGameover(current_state, PLAYER))
+				break;
+			printMatrix(current_state);
+		}
+		while(1)
+		{
+			// opponent next move
+			next_move = chooseRandom(current_state);
+			if(errnum == 1)
+			{
+				printf("Tie!\n");
+				resetErr();
+				break;
+			}
+			else if(errnum == 2)
+			{
+				return -1;
+			}
+
+			current_state[next_move] = OPPONENT;
+			printMatrix(current_state);
+			if(isGameover(current_state, OPPONENT))
+			{
+				printf("Opponent Wins!\n");
+				break;
+			}
+
+			// player move
+			next_move = trainQTensor(current_state, Q_tensor, R_tensor, gamma, Q_train_options);
+			if(errnum)
+				return -1;
+			current_state[next_move] = PLAYER;
+			printMatrix(current_state);
+			if(isGameover(current_state, PLAYER))
+			{
+				printf("Player Wins!\n");
+				break;
+			}
+		}
+		resetMatrix(current_state, sizeof(int8_t));
 	}
-*/
 
 	return 0;
+}
+
+int trainQTensor(const int8_t current_state[], int Q_tensor[][27][27][9],
+				 const int8_t R_tensor[][27][27][2], const float gamma, const int options)
+{
+	int next_move = chooseRandom(current_state);
+	int8_t next_state[9];
+	memcpy(next_state, current_state, 9*sizeof(int8_t));
+	next_state[next_move] = PLAYER;
+
+	int8_t R_value[2];
+	getRValue(current_state, R_tensor, R_value);
+	int next_move_reward = (R_value[0] == next_move) ? (R_value[1]) : (0);
+
+	int Q_matrix[9];
+	getQMatrix(current_state, Q_tensor, Q_matrix);
+	if(errnum)
+		return -1;
+	int Q_current = Q_matrix[next_move];
+
+	int updated_Q_value;
+	if((options & TRAINQTENSOR_MODE) == TRAINQTENSOR_USEMAXQ)
+	{
+		int Q_max = chooseMaxQValue(next_state, Q_tensor);
+		if(errnum)
+			return -1;
+
+		updated_Q_value = (1-gamma)*Q_current + next_move_reward + gamma * Q_max;
+	}
+	else if((options & TRAINQTENSOR_MODE) == TRAINQTENSOR_USEAVGQ)
+	{
+		int Q_avg = chooseAverageQValue(next_state, Q_tensor);
+		if(errnum)
+			return -1;
+
+		updated_Q_value = (1-gamma)*Q_current + next_move_reward + gamma * Q_avg;
+	}
+
+	Q_matrix[next_move] = updated_Q_value;
+	setQMatrix(current_state, Q_tensor, Q_matrix);
+
+	return next_move;
+}
+
+int chooseMaxQValue(const int8_t current_state[], const int Q_tensor[][27][27][9])
+{
+	int Q_matrix[9];
+	resetMatrix(Q_matrix, sizeof(int));
+	if(!getQMatrix(current_state, Q_tensor, Q_matrix))
+		errnum = 1;
+
+	int max = -1;
+	for(int i = 0; i < 9; i++)
+	{
+		// not available spot
+		if(current_state[i] != 0)
+			continue;
+		if(Q_matrix[i] > max)
+			max = Q_matrix[i];
+	}
+
+	return max;
+}
+
+void setErr(int num) { if(num==0) return; errnum = num;}
+void resetErr() {errnum = 0;};
+
+int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][27][27][9])
+{
+	int Q_matrix[9];
+	resetMatrix(Q_matrix, sizeof(int));
+	if(!getQMatrix(current_state, Q_tensor, Q_matrix))
+	{
+		setErr(1);
+		return -1;
+	}
+
+	int sum = 0;
+	for(int i = 0; i < 9; i++)
+		sum += Q_matrix[i];
+
+	int empty_count = 0;
+	for(int i = 0; i < 9; i++)
+	{
+		if(current_state[i] != 0)
+			empty_count++;
+	}
+
+	return sum / empty_count;
+}
+
+bool verifyQMatrix(const int8_t current_state, const int Q_matrix)
+{
+	// if Q matrix is 0 in all non empty spots
+	return true;
+	// else
+	return false;
+}
+
+int chooseRandom(const int8_t current_state[])
+{
+	int empty_count = 0;
+	// find empty spots
+	for(int i = 0; i < 9; i++)
+	{
+		if(current_state[i] == 0)
+			empty_count++;
+	}
+
+	// no where left to place
+	if(empty_count == 0)
+	{
+		setErr(1);
+		return -1;
+	}
+
+	// choose random empty spot
+	empty_count = (rand() % empty_count) + 1;
+	for(int i = 0; i < 9; i++)
+	{
+		if(current_state[i] == 0)
+			empty_count--;
+		if(empty_count == 0)
+			return i;
+	}
+
+	// not supposed to happen
+	setErr(2);
+	return -1;
 }
 
 void printHelp(const char *argv)
@@ -122,7 +305,11 @@ void printHelp(const char *argv)
 	printf("options:");
 	printf("-h: for this help message\n");
 	printf("-t: to train model (default)\n");
-	printf("-c: to set train iteration count (100 by default)\n");
+	printf("-c <int>: to set train iteration count (100 by default)\n");
+	printf("-g <float>: set gamma (0.5 by default)\n");
+	printf("-m: [Q train mode] train Q matrix with max values (default)(do not use with other Q train modes!)\n");
+	printf("-a: [Q train mode] train Q matrix with avg values (do not use with other Q train modes!)\n");
+	printf("-r: [train mode] Player starts at random location (default)(do not use with other train modes!)\n");
 }
 
 int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][2])
@@ -162,10 +349,13 @@ int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][2])
 			}
 
 			current_state[i] = 0;
-			R_value[0] = i;
+			R_value[0] = i + 1;
 			R_value[1] = reward;
 			if(!setRValue(current_state, R_tensor, R_value))
+			{
+				setErr(1);
 				return -1;
+			}
 
 			memset(R_value, 0, 2);
 		}
@@ -193,14 +383,30 @@ bool isGameover(const int8_t current_state[], int8_t player)
 	return false;
 }
 
-int getRValue(const int8_t current_state[], const int8_t R_tensor[][27][27][2], int8_t result[])
+bool getRValue(const int8_t current_state[], const int8_t R_tensor[][27][27][2], int8_t result[])
 {
 	int hash = getHash(current_state);
 	if((hash & 0xff000000) != 0x00)
-		return -1;
+	{
+		setErr(1);
+		return false;
+	}
 
 	memcpy(result, R_tensor[hash >> 24][hash >> 16][hash >> 8], 2);
-	return 0;
+	return true;
+}
+
+bool getQMatrix(const int8_t current_state[], const int Q_tensor[][27][27][9], int result[])
+{
+	int hash = getHash(current_state);
+	if((hash & 0xff000000) != 0x00)
+	{
+		setErr(1);
+		return false;
+	}
+
+	memcpy(result, Q_tensor[hash >> 24][hash >> 16][hash >> 8], 9*sizeof(int));
+	return true;
 }
 
 int getHash(const int8_t current_state[])
@@ -253,8 +459,23 @@ bool setRValue(const int8_t current_state[], int8_t R_tensor[][27][27][2], int8_
 {
 	int hash = getHash(current_state);
 	if((hash & 0xff000000) != 0x00)
+	{
+		setErr(1);
 		return false;
+	}
 	memcpy(R_tensor[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff], R_value, 2);
+	return true;
+}
+
+bool setQMatrix(const int8_t current_state[], int Q_tensor[][27][27][9], int Q_matrix[])
+{
+	int hash = getHash(current_state);
+	if((hash & 0xff000000) != 0x00)
+	{
+		setErr(1);
+		return false;
+	}
+	memcpy(Q_tensor[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff], Q_matrix, 9*sizeof(int));
 	return true;
 }
 
@@ -265,15 +486,14 @@ void printMatrix(const int8_t matrix[])
 		   matrix[3], matrix[4], matrix[5], matrix[6], matrix[7], matrix[8]);
 }
 
-void resetMatrix(int8_t matrix[]) { memset(matrix, 0, 9); }
+void resetMatrix(void* matrix, int length) { memset(matrix, 0, 9*length); }
 
 int chooseMove(const int8_t current_state[], const int8_t R_tensor[][27][27][2])
 {
 	int8_t R_value[2];
 	getRValue(current_state, R_tensor, R_value);
-	
+
 	if(R_value[1] <= 0)
 	{
-		
 	}
 }
