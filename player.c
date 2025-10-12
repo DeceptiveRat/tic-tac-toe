@@ -12,12 +12,12 @@
 
 int trainMatrix(const int train_iteration);
 void printHelp(const char *argv);
-int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][9]);
+int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][2]);
 bool isGameover(const int8_t current_state[], int8_t player);
-int getRMatrix(const int8_t current_state[], const int8_t R_tensor[][27][27][9], int8_t result[]);
+int getRValue(const int8_t current_state[], const int8_t R_tensor[][27][27][2], int8_t result[]);
 int getHash(const int8_t current_state[]);
 int unhash(const int *hash, int8_t return_value[]);
-bool setRMatrix(const int8_t current_state[], int8_t R_tensor[][27][27][9], int8_t R_matrix[]);
+bool setRValue(const int8_t current_state[], int8_t R_tensor[][27][27][2], int8_t R_value[]);
 void printMatrix(const int8_t matrix[]);
 void resetMatrix(int8_t matrix[]);
 
@@ -61,9 +61,9 @@ int main(int argc, char **argv)
 
 int trainMatrix(const int train_iteration)
 {
-	int8_t R_tensor[27][27][27][9];
+	int8_t R_tensor[27][27][27][2];
 	int8_t Q_tensor[27][27][27][9];
-	memset(R_tensor, 0, 27 * 27 * 27 * 9);
+	memset(R_tensor, 0, 27 * 27 * 27 * 2);
 	memset(Q_tensor, 0, 27 * 27 * 27 * 9);
 
 	int8_t current_state[9] = {0};
@@ -74,6 +74,32 @@ int trainMatrix(const int train_iteration)
 		exit(-1);
 	}
 
+	int count=0;
+	for(int i = 0;i<27;i++)
+	{
+		for(int j = 0;j<27;j++)
+		{
+			for(int k =0;k<27;k++)
+			{
+				if(R_tensor[i][j][k][0] != 0)
+				{
+					printf("==============================================================\n");
+					printf("i: %2d, j: %2d, k: %2d\n", i, j, k);
+					int8_t temp[9];
+					int hash = ((i<<16)|(j<<8)|(k))&0x00ffffff;
+					printf("board:\n");
+					unhash(&hash, temp);
+					printMatrix(temp);
+					printf("R value:%d, %d\n", R_tensor[i][j][k][0], R_tensor[i][j][k][1]);
+				}
+			}
+		}
+	}
+
+	printf("count: %d\n", count);
+
+
+/*
 	// training session
 	srand(time(NULL));
 	for(int i = 0; i < train_iteration; i++)
@@ -82,10 +108,10 @@ int trainMatrix(const int train_iteration)
 		current_state[r] = 1;
 		while(!isGameover(current_state, PLAYER) && !isGameover(current_state, OPPONENT))
 		{
-			int8_t choice_matrix[8];
 		}
 		resetMatrix(current_state);
 	}
+*/
 
 	return 0;
 }
@@ -99,10 +125,10 @@ void printHelp(const char *argv)
 	printf("-c: to set train iteration count (100 by default)\n");
 }
 
-int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][9])
+int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][2])
 {
-	int8_t R_matrix[9];
-	memcpy(R_matrix, current_state, 9);
+	int8_t R_value[2];
+	memset(R_value, 0, 2);
 	for(int i = 0; i < 9; i++)
 	{
 		if(current_state[i] != 0)
@@ -136,11 +162,12 @@ int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][9])
 			}
 
 			current_state[i] = 0;
-			R_matrix[i] = reward;
-			if(!setRMatrix(current_state, R_tensor, R_matrix))
+			R_value[0] = i;
+			R_value[1] = reward;
+			if(!setRValue(current_state, R_tensor, R_value))
 				return -1;
 
-			R_matrix[i] = 0;
+			memset(R_value, 0, 2);
 		}
 	}
 
@@ -166,13 +193,13 @@ bool isGameover(const int8_t current_state[], int8_t player)
 	return false;
 }
 
-int getRMatrix(const int8_t current_state[], const int8_t R_tensor[][27][27][9], int8_t result[])
+int getRValue(const int8_t current_state[], const int8_t R_tensor[][27][27][2], int8_t result[])
 {
 	int hash = getHash(current_state);
 	if((hash & 0xff000000) != 0x00)
 		return -1;
 
-	memcpy(result, R_tensor[hash >> 24][hash >> 16][hash >> 8], 9);
+	memcpy(result, R_tensor[hash >> 24][hash >> 16][hash >> 8], 2);
 	return 0;
 }
 
@@ -222,12 +249,12 @@ int unhash(const int *hash, int8_t return_value[])
 	return 0;
 }
 
-bool setRMatrix(const int8_t current_state[], int8_t R_tensor[][27][27][9], int8_t R_matrix[])
+bool setRValue(const int8_t current_state[], int8_t R_tensor[][27][27][2], int8_t R_value[])
 {
 	int hash = getHash(current_state);
 	if((hash & 0xff000000) != 0x00)
 		return false;
-	memcpy(R_tensor[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff], R_matrix, 9);
+	memcpy(R_tensor[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff], R_value, 2);
 	return true;
 }
 
@@ -240,21 +267,13 @@ void printMatrix(const int8_t matrix[])
 
 void resetMatrix(int8_t matrix[]) { memset(matrix, 0, 9); }
 
-int chooseMove(const int8_t current_state[], const int8_t R_tensor[][27][27][9])
+int chooseMove(const int8_t current_state[], const int8_t R_tensor[][27][27][2])
 {
-	int8_t R_matrix[9];
-	getRMatrix(current_state, R_tensor, R_matrix);
-
-	int max_index = 0;
-	int zero_count = 0;
-	for(int i = 1; i < 9; i++)
+	int8_t R_value[2];
+	getRValue(current_state, R_tensor, R_value);
+	
+	if(R_value[1] <= 0)
 	{
-		if(R_matrix[i] > R_matrix[max_index])
-			max_index = i;
-	}
-
-	if(R_matrix[max_index] == 0)
-	{
-		int 
+		
 	}
 }
