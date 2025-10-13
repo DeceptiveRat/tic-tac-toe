@@ -10,13 +10,19 @@
 extern int errnum;
 extern int debug_mode;
 
+#ifdef DEBUG
+int Q_update_count[27][27][27] = {0};
+float avg_update_count = 0; // average number of updates chosen Q matrix has
+int temporary_update_count_sum=0;
+#endif
+
 int trainMode(const int train_iteration, const float gamma, const int train_options,
 			  const int game_options)
 {
 	srand(time(NULL));
 	int8_t R_tensor[27][27][27][2];
 	int Q_tensor[27][27][27][9];
-	memset(R_tensor, 0, 27 * 27 * 27 * 2 * sizeof(int8_t));
+	memset(R_tensor, 0xff, 27 * 27 * 27 * 2 * sizeof(int8_t));
 	memset(Q_tensor, 0, 27 * 27 * 27 * 9 * sizeof(int));
 
 	int8_t current_state[9] = {0};
@@ -36,34 +42,23 @@ int trainMode(const int train_iteration, const float gamma, const int train_opti
 	// training session
 	for(int i = 0; i < train_iteration; i++)
 	{
-		DEBUG_PRINT("Starting game number[%d]:\n", i);
 #ifdef DEBUG
 		int result = simulateGame(R_tensor, Q_tensor, gamma, train_options, game_options);
 		if(errnum)
 			return -1;
 		else
 			results[i * SEGMENTS / train_iteration][result + 1]++;
+		if((i+1)%(train_iteration/SEGMENTS)==0)
+		{
+			DEBUG_PRINT("avg update count: %.3f\n", avg_update_count);
+			avg_update_count= 0;
+		}
 #else
 		simulateGame(R_tensor, Q_tensor, gamma, train_options, game_options);
 #endif
 	}
-
-#ifdef DEBUG
-	if(debug_mode)
-	{
-		for(int i = 0; i < SEGMENTS; i++)
-		{
-			int game_count = results[i][0] + results[i][1] + results[i][2];
-			printf("Segment [%d]:\n", i);
-			printf("%10s : %3d\t%9s : %.3f\n", "win count", results[i][2], "win count",
-				   (float)results[i][2] / game_count);
-			printf("%10s : %3d\t%9s : %.3f\n", "tie count", results[i][1], "tie count",
-				   (float)results[i][1] / game_count);
-			printf("%10s : %3d\t%9s : %.3f\n", "lose count", results[i][0], "lose count",
-				   (float)results[i][0] / game_count);
-		}
-	}
-#endif
+	//DEBUG_EXEC(printUpdateCount());
+	//DEBUG_EXEC(printResults(results));
 
 	return 0;
 }
@@ -106,14 +101,21 @@ int trainQTensor(const int8_t current_state[], int Q_tensor[][27][27][9],
 
 	Q_matrix[next_move] = updated_Q_value;
 	setQMatrix(current_state, Q_tensor, Q_matrix);
+#ifdef DEBUG
 	if(debug_mode)
 	{
-		if(!verifyQMatrix(current_state, Q_matrix))
-		{
-			setErr(E_CRITICAL_ERROR);
+		temporary_update_count_sum += getQCount(current_state, Q_update_count);
+		addQCount(current_state, Q_update_count);
+		if(errnum == EC_HASH_FAIL)
 			return -1;
-		}
 	}
+	if(!verifyQMatrix(current_state, Q_matrix))
+	{
+		setErr(EC_Q_MATRIX_ERROR);
+		DEBUG_EXEC(printMatrix(current_state));
+		return -1;
+	}
+#endif
 
 	return next_move;
 }
@@ -189,7 +191,7 @@ int chooseRandom(const int8_t current_state[])
 	}
 
 	// not supposed to happen
-	setErr(E_CRITICAL_ERROR);
+	setErr(EC_ETC);
 	return -1;
 }
 
@@ -205,8 +207,10 @@ int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][2])
 		{
 			int reward = 0;
 			current_state[i] = P1;
+			// set reward
 			if(isGameover(current_state, P1))
 				reward = 100;
+			// set penalty
 			else
 			{
 				int branch_count = 0;
@@ -229,13 +233,15 @@ int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][2])
 					reward /= branch_count;
 			}
 
+			// save value
 			current_state[i] = 0;
-			R_value[0] = i + 1;
+			R_value[0] = i;
 			R_value[1] = reward;
 			setRValue(current_state, R_tensor, R_value);
 			if(errnum)
 				return -1;
 
+			// reset matrices
 			memset(R_value, 0, 2);
 		}
 	}
@@ -260,11 +266,17 @@ int simulateGame(const int8_t R_tensor[][27][27][2], int Q_tensor[][27][27][9], 
 {
 	int8_t current_state[9] = {0};
 	int next_move;
+	int return_value;
+#ifdef DEBUG
+	int move_count=0;
+#endif
 	if((game_options & SIMULATEGAME_OPTIONS) == SIMULATEGAME_RANDOMSTART)
 	{
 		int r = rand() % 9;
 		current_state[r] = 1;
-		DEBUG_EXEC(printMatrix(current_state));
+#ifdef DEBUG
+		move_count++;
+#endif
 	}
 	else
 	{
@@ -273,7 +285,9 @@ int simulateGame(const int8_t R_tensor[][27][27][2], int Q_tensor[][27][27][9], 
 		if(errnum)
 			return -1;
 		current_state[next_move] = P1;
-		DEBUG_EXEC(printMatrix(current_state));
+#ifdef DEBUG
+		move_count++;
+#endif
 	}
 	while(1)
 	{
@@ -281,32 +295,84 @@ int simulateGame(const int8_t R_tensor[][27][27][2], int Q_tensor[][27][27][9], 
 		next_move = chooseRandom(current_state);
 		if(errnum == E_TIE_DETECTED)
 		{
-			DEBUG_PRINT("Tie!\n");
 			resetErr();
-			return 0;
+			return_value = 0;
+			break;
 		}
-		else if(errnum == E_CRITICAL_ERROR)
+		else if(errnum == EC_ETC)
 			return -1;
 
 		// opponent next move
 		current_state[next_move] = P2;
-		DEBUG_EXEC(printMatrix(current_state));
+#ifdef DEBUG
+		move_count++;
+#endif
 		if(isGameover(current_state, P2))
-		{
-			DEBUG_PRINT("Opponent Wins!\n");
-			return P2;
-		}
+			return_value = P2;
 
 		// player move
 		next_move = trainQTensor(current_state, Q_tensor, R_tensor, gamma, train_options);
 		if(errnum)
 			return -1;
 		current_state[next_move] = P1;
-		DEBUG_EXEC(printMatrix(current_state));
+#ifdef DEBUG
+		move_count++;
+#endif
 		if(isGameover(current_state, P1))
+			return_value = P1;
+	}
+
+#ifdef DEBUG
+	avg_update_count += (float)temporary_update_count_sum/move_count;
+	temporary_update_count_sum = 0;
+#endif
+
+	return return_value;
+}
+
+void printResults(const int results[][3])
+{
+	for(int i = 0; i < SEGMENTS; i++)
+	{
+		int game_count = results[i][0] + results[i][1] + results[i][2];
+		printf("Segment [%d]:\n", i);
+		printf("%10s : %3d\t%9s : %.3f\n", "win count", results[i][2], "win count",
+			   (float)results[i][2] / game_count);
+		printf("%10s : %3d\t%9s : %.3f\n", "tie count", results[i][1], "tie count",
+			   (float)results[i][1] / game_count);
+		printf("%10s : %3d\t%9s : %.3f\n", "lose count", results[i][0], "lose count",
+			   (float)results[i][0] / game_count);
+	}
+}
+
+#ifdef DEBUG
+void printRTensor(const int8_t R_tensor[][27][27][2])
+{
+	for(int i = 0;i<27;i++)
+	{
+		for(int j = 0;j<27;j++)
 		{
-			DEBUG_PRINT("Player Wins!\n");
-			return P1;
+			for(int k = 0;k<27;k++)
+			{
+				if((int8_t)R_tensor[i][j][k][0] != -1)
+					printf("%d: %d\n", R_tensor[i][j][k][0], R_tensor[i][j][k][1]);
+			}
 		}
 	}
 }
+
+void printUpdateCount()
+{
+	for(int i = 0;i<27;i++)
+	{
+		for(int j = 0;j<27;j++)
+		{
+			for(int k = 0;k<27;k++)
+			{
+				if(Q_update_count[i][j][k] != 0)
+					printf("update counts: %d\n", Q_update_count[i][j][k]);
+			}
+		}
+	}
+}
+#endif

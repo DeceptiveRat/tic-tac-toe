@@ -18,8 +18,11 @@
 #define P2 -1
 
 // Error numbers
-#define E_CRITICAL_ERROR 1 // errors where program can't go on
+// EC: critical errors
+#define EC_Q_MATRIX_ERROR 1
 #define E_TIE_DETECTED 2
+#define EC_ETC 3
+#define EC_HASH_FAIL 4
 
 void printHelp(const char *argv);
 bool isGameover(const int8_t current_state[], int8_t player);
@@ -35,3 +38,7 @@ void setErr(int num);
 void resetErr();
 bool verifyQMatrix(const int8_t current_state[], const int Q_matrix[]);
 bool verifyGamma(const float gamma);
+#ifdef DEBUG
+void addQCount(const int8_t current_state[], int Q_update_count[][27][27]);
+int getQCount(const int8_t current_state[], int Q_update_count[][27][27]);
+#endif

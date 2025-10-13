@@ -44,10 +44,11 @@ int main(int argc, char **argv)
 				Q_train_options |= TRAINQTENSOR_USEAVGQ;
 				break;
 			case 'r':
-				train_options |= TRAINMODE_RANDOMSTART;
+				train_options |= SIMULATEGAME_RANDOMSTART;
 				break;
 			case 'd':
 				debug_mode = 1;
+				break;
 			case '?':
 				printf("unknown option: %c\n", optopt);
 				break;
@@ -66,7 +67,11 @@ int main(int argc, char **argv)
 			printf("Gamma is between 0 and 1!\n");
 			return -1;
 		}
-		trainMode(train_iteration, gamma, Q_train_options, train_options);
+		if(trainMode(train_iteration, gamma, Q_train_options, train_options) == -1)
+		{
+			printf("Critical Error!\n");
+			printf("Error number: %d\n", errnum);
+		}
 	}
 
 	return 0;

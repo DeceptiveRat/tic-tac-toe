@@ -72,7 +72,7 @@ void getRValue(const int8_t current_state[], const int8_t R_tensor[][27][27][2],
 	int hash = getHash(current_state);
 	if((hash & 0xff000000) != 0x00)
 	{
-		setErr(E_CRITICAL_ERROR);
+		setErr(EC_HASH_FAIL);
 		return;
 	}
 
@@ -85,7 +85,7 @@ void getQMatrix(const int8_t current_state[], const int Q_tensor[][27][27][9], i
 	int hash = getHash(current_state);
 	if((hash & 0xff000000) != 0x00)
 	{
-		setErr(E_CRITICAL_ERROR);
+		setErr(EC_HASH_FAIL);
 		return;
 	}
 
@@ -144,7 +144,7 @@ void setRValue(const int8_t current_state[], int8_t R_tensor[][27][27][2], int8_
 	int hash = getHash(current_state);
 	if((hash & 0xff000000) != 0x00)
 	{
-		setErr(E_CRITICAL_ERROR);
+		setErr(EC_HASH_FAIL);
 		return;
 	}
 	memcpy(R_tensor[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff], R_value, 2);
@@ -156,7 +156,7 @@ void setQMatrix(const int8_t current_state[], int Q_tensor[][27][27][9], int Q_m
 	int hash = getHash(current_state);
 	if((hash & 0xff000000) != 0x00)
 	{
-		setErr(E_CRITICAL_ERROR);
+		setErr(EC_HASH_FAIL);
 		return;
 	}
 	memcpy(Q_tensor[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff], Q_matrix,
@@ -174,3 +174,28 @@ void printMatrix(const int8_t matrix[])
 void resetMatrix(void *matrix, int length) { memset(matrix, 0, 9 * length); }
 
 bool verifyGamma(const float gamma) { return ((gamma >= 0) && (gamma <= 1)) ? (true) : (false); }
+
+#ifdef DEBUG
+void addQCount(const int8_t current_state[], int Q_update_count[][27][27])
+{
+	int hash = getHash(current_state);
+	if((hash & 0xff000000) != 0x00)
+	{
+		setErr(EC_HASH_FAIL);
+		return;
+	}
+	Q_update_count[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff]++;
+	return;
+}
+
+int getQCount(const int8_t current_state[], int Q_update_count[][27][27])
+{
+	int hash = getHash(current_state);
+	if((hash & 0xff000000) != 0x00)
+	{
+		setErr(EC_HASH_FAIL);
+		return -1;
+	}
+	return Q_update_count[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff];
+}
+#endif
