@@ -1,6 +1,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "common.h"
 
@@ -199,3 +200,133 @@ int getQCount(const int8_t current_state[], int Q_update_count[][27][27])
 	return Q_update_count[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff];
 }
 #endif
+
+int chooseMove(const int8_t current_state[], const int Q_tensor[][27][27][9])
+{
+	int Q_matrix[9];
+	getQMatrix(current_state, Q_tensor, Q_matrix);
+	if(errnum == EC_HASH_FAIL)
+		return -1;
+
+	int max_index = 0;
+	for(int i = 1;i<9;i++)
+	{
+		if(Q_matrix[i] > Q_matrix[max_index])
+			max_index = i;
+	}
+
+	return max_index;
+}
+
+int playGame(const int Q_tensor[][27][27][9])
+{
+	int8_t current_state[9] = {0};
+	int Q_matrix[9];
+	int choice;
+
+	while(1)
+	{
+		choice = 0;
+		// P1 move
+		getQMatrix(current_state, Q_tensor, Q_matrix);
+		if(errnum == EC_HASH_FAIL)
+			return -1;
+		choice = chooseOptimalSpot(current_state, Q_matrix);
+		if(errnum == E_TIE_DETECTED)
+		{
+			resetErr();
+			return TIE;
+		}
+		current_state[choice] = P1;
+		if(isGameover(current_state, P1) == true)
+			return P1;
+
+		// P2 move
+		getQMatrix(current_state, Q_tensor, Q_matrix);
+		if(errnum == EC_HASH_FAIL)
+			return -1;
+		choice = chooseOptimalSpot(current_state, Q_matrix);
+		current_state[choice] = P2;
+		if(isGameover(current_state, P2) == true)
+			return P2;
+	}
+}
+
+int chooseRandomEmpty(const int8_t current_state[])
+{
+	int empty_count = 0;
+	// find empty spots
+	for(int i = 0; i < 9; i++)
+	{
+		if(current_state[i] == 0)
+			empty_count++;
+	}
+
+	// no where left to place
+	if(empty_count == 0)
+	{
+		setErr(E_TIE_DETECTED);
+		return -1;
+	}
+
+	// choose random empty spot
+	empty_count = (rand() % empty_count) + 1;
+	for(int i = 0; i < 9; i++)
+	{
+		if(current_state[i] == 0)
+			empty_count--;
+		if(empty_count == 0)
+			return i;
+	}
+
+	// not supposed to happen
+	setErr(EC_ETC);
+	return -1;
+}
+
+int chooseOptimalSpot(const int8_t current_state[9], const int Q_matrix[9])
+{
+	int optimal_index=-1;
+	for(int i = 0;i<9;i++)
+	{
+		if(current_state[i] == 0)
+		{
+			if(optimal_index == -1)
+			{
+				optimal_index = i;
+				continue;
+			}
+
+			if(Q_matrix[optimal_index] < Q_matrix[i])
+				optimal_index = i;
+			// choose randomly if both have same value
+			else if(Q_matrix[optimal_index] == Q_matrix[i])
+				optimal_index = (rand()%2==0)?(optimal_index):(i);
+		}
+	}
+
+	if(optimal_index == -1)
+		setErr(E_TIE_DETECTED);
+	return optimal_index;
+}
+
+void printQTensor(const int Q_tensor[][27][27][9])
+{
+	for(int i = 0;i<27;i++)
+	{
+		for(int j = 0;j<27;j++)
+		{
+			for(int k = 0;k<27;k++)
+			{
+				int empty[9] = {0};
+				int temp[9];
+				memcpy(temp, Q_tensor[i][j][k], 9*sizeof(int));
+				if(memcmp(empty, temp, 9*sizeof(int)) != 0)
+				{
+					printf("===============================\n");
+					printf("%-3d %8d %8d\n%-3d %8d %8d\n%-3d %8d %8d\n", temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8]);
+				}
+			}
+		}
+	}
+}

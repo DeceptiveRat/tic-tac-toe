@@ -16,6 +16,7 @@
 
 #define P1 1
 #define P2 -1
+#define TIE 0
 
 // Error numbers
 // EC: critical errors
@@ -41,4 +42,9 @@ bool verifyGamma(const float gamma);
 #ifdef DEBUG
 void addQCount(const int8_t current_state[], int Q_update_count[][27][27]);
 int getQCount(const int8_t current_state[], int Q_update_count[][27][27]);
+void printQTensor(const int Q_tensor[][27][27][9]);
 #endif
+int chooseMove(const int8_t current_state[], const int Q_tensor[][27][27][9]);
+int chooseOptimalSpot(const int8_t current_state[9], const int Q_matrix[9]);
+int playGame(const int Q_tensor[][27][27][9]);
+int chooseRandomEmpty(const int8_t current_state[]);

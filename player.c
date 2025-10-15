@@ -15,12 +15,18 @@ extern int debug_mode;
 
 int main(int argc, char **argv)
 {
+	int8_t R_tensor[27][27][27][2];
+	int Q_tensor[27][27][27][9];
+	memset(R_tensor, 0xff, 27 * 27 * 27 * 2 * sizeof(int8_t));
+	memset(Q_tensor, 0, 27 * 27 * 27 * 9 * sizeof(int));
+
 	int opt;
-	int mode = 1;
+	int mode = 0;
 	int train_iteration = 5;
 	float gamma = 0.5;
 	int Q_train_options = 0x01;
 	int train_options = 0x01;
+	srand(time(NULL));
 
 	while((opt = getopt(argc, argv, ":htc:g:mard")) != -1)
 	{
@@ -28,6 +34,7 @@ int main(int argc, char **argv)
 		{
 			case 'h':
 				printHelp(argv[0]);
+				exit(-1);
 				break;
 			case 't':
 				mode = 1;
@@ -55,24 +62,45 @@ int main(int argc, char **argv)
 		}
 	}
 
-	if(mode == 0)
-	{
-		printHelp(argv[0]);
-		return 0;
-	}
-	else if(mode == 1)
+	if(mode == 1)
 	{
 		if(!verifyGamma(gamma))
 		{
 			printf("Gamma is between 0 and 1!\n");
 			return -1;
 		}
-		if(trainMode(train_iteration, gamma, Q_train_options, train_options) == -1)
+		if(trainMode(Q_tensor, R_tensor, train_iteration, gamma, Q_train_options, train_options) == -1)
 		{
 			printf("Critical Error!\n");
 			printf("Error number: %d\n", errnum);
 		}
+
 	}
+
+	DEBUG_EXEC(printQTensor(Q_tensor));
+
+	int results[3] = {0};
+	int game_count=100000;
+	for(int i = 0;i<game_count;i++)
+	{
+		int result;
+		result = playGame(Q_tensor);
+		if(errnum)
+		{
+			printf("Critical Error!\n");
+			printf("Error number: %d\n", errnum);
+		}
+		if(result == P1)
+			results[0]++;
+		else if(result == TIE)
+			results[1]++;
+		else
+			results[2]++;
+	}
+
+	printf("P1 win rate: %.3f\n", (float)results[0]/game_count);
+	printf("Tie rate: %.3f\n", (float)results[1]/game_count);
+	printf("P2 win rate: %.3f\n", (float)results[2]/game_count);
 
 	return 0;
 }
