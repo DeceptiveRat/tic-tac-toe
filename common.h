@@ -17,6 +17,8 @@
 #define P1 1
 #define P2 -1
 #define TIE 0
+#define RFILE "R_tensor.dat"
+#define QFILE "Q_tensor.dat"
 
 // Error numbers
 // EC: critical errors
@@ -24,6 +26,9 @@
 #define E_TIE_DETECTED 2
 #define EC_ETC 3
 #define EC_HASH_FAIL 4
+#define EC_FILE_OPEN 5
+#define EC_FILE_WRITE 6
+#define EC_FILE_READ 7
 
 void printHelp(const char *argv);
 bool isGameover(const int8_t current_state[], int8_t player);
@@ -48,3 +53,10 @@ int chooseMove(const int8_t current_state[], const int Q_tensor[][9]);
 int chooseOptimalSpot(const int8_t current_state[9], const int Q_matrix[9]);
 int playGame(const int Q_tensor[][9]);
 int chooseRandomEmpty(const int8_t current_state[]);
+int saveRTensor(const int8_t R_tensor[][2], char* file_name);
+int saveQTensor(const int Q_tensor[][9], char* file_name);
+int saveTensors(const int Q_tensor[][9], char* Q_file, const int8_t R_tensor[][2], char* R_file);
+int loadRTensor(int8_t R_tensor[][2], char* file_name);
+int loadQTensor(int Q_tensor[][9], char* file_name);
+int loadTensors(int Q_tensor[][9], char* Q_file, int8_t R_tensor[][2], char* R_file);
+void detectError();

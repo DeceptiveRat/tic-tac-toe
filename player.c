@@ -27,8 +27,10 @@ int main(int argc, char **argv)
 	int Q_train_options = 0x01;
 	int train_options = 0x01;
 	srand(time(NULL));
+	bool save_tensors = false;
+	bool load_tensors = false;
 
-	while((opt = getopt(argc, argv, ":htc:g:mard")) != -1)
+	while((opt = getopt(argc, argv, ":htc:g:mardsl")) != -1)
 	{
 		switch(opt)
 		{
@@ -56,6 +58,12 @@ int main(int argc, char **argv)
 			case 'd':
 				debug_mode = 1;
 				break;
+			case 's':
+				save_tensors = true;
+				break;
+			case 'l':
+				load_tensors = true;
+				break;
 			case '?':
 				printf("unknown option: %c\n", optopt);
 				break;
@@ -70,14 +78,22 @@ int main(int argc, char **argv)
 			return -1;
 		}
 		if(trainMode(Q_tensor, R_tensor, train_iteration, gamma, Q_train_options, train_options) == -1)
+		detectError();
+		
+		if(save_tensors)
 		{
-			printf("Critical Error!\n");
-			printf("Error number: %d\n", errnum);
+			saveTensors(Q_tensor, QFILE, R_tensor, RFILE);
+			detectError();
 		}
-
 	}
 
-	DEBUG_EXEC(printQTensor(Q_tensor));
+	//DEBUG_EXEC(printQTensor(Q_tensor));
+
+	if(load_tensors)
+	{
+		loadTensors(Q_tensor, QFILE, R_tensor, RFILE);
+		detectError();
+	}
 
 	int results[3] = {0};
 	int game_count=100000;
@@ -85,11 +101,7 @@ int main(int argc, char **argv)
 	{
 		int result;
 		result = playGame(Q_tensor);
-		if(errnum)
-		{
-			printf("Critical Error!\n");
-			printf("Error number: %d\n", errnum);
-		}
+		detectError();
 		if(result == P1)
 			results[0]++;
 		else if(result == TIE)

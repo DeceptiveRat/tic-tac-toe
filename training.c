@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <limits.h>
 
 #include "common.h"
 #include "training.h"
@@ -67,25 +68,36 @@ int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
 	memcpy(next_state, current_state, 9 * sizeof(int8_t));
 	next_state[next_move] = P1;
 
+	// get reward for next move
 	int8_t R_value[2];
 	getRValue(current_state, R_tensor, R_value);
 	if(errnum == EC_HASH_FAIL)
 		return -1;
 	int next_move_reward = (R_value[0] == next_move) ? (R_value[1]) : (0);
 
+	// get Q matrix
 	int Q_matrix[9];
 	getQMatrix(current_state, Q_tensor, Q_matrix);
 	if(errnum == EC_HASH_FAIL)
 		return -1;
 	int Q_current = Q_matrix[next_move];
 
+	// update Q value
 	int updated_Q_value;
 	if((options & TRAINQTENSOR_MODE) == TRAINQTENSOR_USEMAXQ)
 	{
 		// choose potential max reward if we make the move
 		int Q_max = chooseMaxQValue(next_state, Q_tensor);
 		if(errnum)
-			return -1;
+		{
+			if(errnum == E_TIE_DETECTED)
+			{
+				Q_max = 0;
+				resetErr();
+			}
+			else
+				return -1;
+		}
 
 		updated_Q_value = (1 - gamma) * Q_current + next_move_reward + gamma * Q_max;
 	}
@@ -94,11 +106,20 @@ int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
 		// choose average of potential reward if we make the move
 		int Q_avg = chooseAverageQValue(next_state, Q_tensor);
 		if(errnum)
-			return -1;
+		{
+			if(errnum == E_TIE_DETECTED)
+			{
+				Q_avg = 0;
+				resetErr();
+			}
+			else
+				return -1;
+		}
 
 		updated_Q_value = (1 - gamma) * Q_current + next_move_reward + gamma * Q_avg;
 	}
-
+	
+	// save updated Q value
 	Q_matrix[next_move] = updated_Q_value;
 	setQMatrix(current_state, Q_tensor, Q_matrix);
 #ifdef DEBUG
@@ -122,13 +143,26 @@ int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
 
 int chooseMaxQValue(const int8_t current_state[], const int Q_tensor[][9])
 {
+	// check for tie
+	int empty_count = 0;
+	for(int i = 0; i < 9; i++)
+	{
+		if(current_state[i] == 0)
+			empty_count++;
+	}
+	if(empty_count == 0)
+	{
+		setErr(E_TIE_DETECTED);
+		return -1;
+	}
+
 	int Q_matrix[9];
 	resetMatrix(Q_matrix, sizeof(int));
 	getQMatrix(current_state, Q_tensor, Q_matrix);
 	if(errnum)
 		return -1;
 
-	int max = -1;
+	int max = INT_MIN;
 	for(int i = 0; i < 9; i++)
 	{
 		// not available spot
@@ -138,11 +172,27 @@ int chooseMaxQValue(const int8_t current_state[], const int Q_tensor[][9])
 			max = Q_matrix[i];
 	}
 
+	if(max == INT_MIN)
+		DEBUG_PRINT("Not a tie but minimum value detected!\n");
+
 	return max;
 }
 
 int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][9])
 {
+	// check for tie
+	int empty_count = 0;
+	for(int i = 0; i < 9; i++)
+	{
+		if(current_state[i] == 0)
+			empty_count++;
+	}
+	if(empty_count == 0)
+	{
+		setErr(E_TIE_DETECTED);
+		return -1;
+	}
+
 	int Q_matrix[9];
 	resetMatrix(Q_matrix, sizeof(int));
 	getQMatrix(current_state, Q_tensor, Q_matrix);
@@ -152,13 +202,6 @@ int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][9])
 	int sum = 0;
 	for(int i = 0; i < 9; i++)
 		sum += Q_matrix[i];
-
-	int empty_count = 0;
-	for(int i = 0; i < 9; i++)
-	{
-		if(current_state[i] != 0)
-			empty_count++;
-	}
 
 	return sum / empty_count;
 }

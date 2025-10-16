@@ -4,3 +4,4 @@ debug.log
 .gdb_history
 *.o
 all.vim
+*.dat

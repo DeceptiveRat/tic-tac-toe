@@ -48,6 +48,8 @@ void printHelp(const char *argv)
 		   "modes!)\n");
 	printf("-r: [game options] Player starts at random location (default)(do not use with other "
 		   "game options!)\n");
+	printf("-s: save trained tensors (file names: %s, %s)\n", QFILE, RFILE);
+	printf("-l: load trained tensors (file names: %s, %s)\n", QFILE, RFILE);
 }
 
 bool isGameover(const int8_t current_state[], int8_t player)
@@ -294,5 +296,117 @@ void printQTensor(const int Q_tensor[][9])
 			printf("===============================\n");
 			printf("%-3d %8d %8d\n%-3d %8d %8d\n%-3d %8d %8d\n", temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8]);
 		}
+	}
+}
+
+int saveRTensor(const int8_t R_tensor[][2], char* file_name)
+{
+	FILE* file_ptr;
+	file_ptr = fopen(file_name, "wb");
+	if(file_ptr == NULL)
+	{
+		setErr(EC_FILE_OPEN);
+		return -1;
+	}
+
+	if(fwrite(R_tensor, sizeof(int), 19683*2, file_ptr) != 19683*2)
+	{
+		setErr(EC_FILE_WRITE);
+		return -1;
+	}
+
+	fclose(file_ptr);
+	return 0;
+}
+
+int saveQTensor(const int Q_tensor[][9], char* file_name)
+{
+	FILE* file_ptr;
+	file_ptr = fopen(file_name, "wb");
+	if(file_ptr == NULL)
+	{
+		setErr(EC_FILE_OPEN);
+		return -1;
+	}
+
+	if(fwrite(Q_tensor, sizeof(int), 19683*9, file_ptr) != 19683*9)
+	{
+		setErr(EC_FILE_WRITE);
+		return -1;
+	}
+
+	fclose(file_ptr);
+	return 0;
+}
+
+int saveTensors(const int Q_tensor[][9], char* Q_file, const int8_t R_tensor[][2], char* R_file)
+{
+	saveRTensor(R_tensor, R_file);
+	if(errnum)
+		return -1;
+	saveQTensor(Q_tensor, Q_file);
+	if(errnum)
+		return -1;
+	return 0;
+}
+
+int loadRTensor(int8_t R_tensor[][2], char* file_name)
+{
+	FILE* file_ptr;
+	file_ptr = fopen(file_name, "rb");
+	if(file_ptr == NULL)
+	{
+		setErr(EC_FILE_OPEN);
+		return -1;
+	}
+
+	if(fread(R_tensor, sizeof(int), 19683*2, file_ptr) != 19683*2)
+	{
+		setErr(EC_FILE_READ);
+		return -1;
+	}
+
+	fclose(file_ptr);
+	return 0;
+}
+
+int loadQTensor(int Q_tensor[][9], char* file_name)
+{
+	FILE* file_ptr;
+	file_ptr = fopen(file_name, "rb");
+	if(file_ptr == NULL)
+	{
+		setErr(EC_FILE_OPEN);
+		return -1;
+	}
+
+	if(fread(Q_tensor, sizeof(int), 19683*9, file_ptr) != 19683*9)
+	{
+		setErr(EC_FILE_READ);
+		return -1;
+	}
+
+	fclose(file_ptr);
+	return 0;
+}
+
+int loadTensors(int Q_tensor[][9], char* Q_file, int8_t R_tensor[][2], char* R_file)
+{
+	loadRTensor(R_tensor, R_file);
+	if(errnum)
+		return -1;
+	loadQTensor(Q_tensor, Q_file);
+	if(errnum)
+		return -1;
+	return 0;
+}
+
+void detectError()
+{
+	if(errnum)
+	{
+		printf("Critical Error!\n");
+		printf("Error number: %d\n", errnum);
+		exit(-1);
 	}
 }
