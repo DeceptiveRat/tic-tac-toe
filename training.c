@@ -11,12 +11,12 @@ extern int errnum;
 extern int debug_mode;
 
 #ifdef DEBUG
-int Q_update_count[27][27][27] = {0};
+int Q_update_count[19683] = {0};
 float avg_update_count = 0; // average number of updates chosen Q matrix has
 int temporary_update_count_sum = 0;
 #endif
 
-int trainMode(int Q_tensor[][27][27][9], int8_t R_tensor[][27][27][2], const int train_iteration,
+int trainMode(int Q_tensor[][9], int8_t R_tensor[][2], const int train_iteration,
 			  const float gamma, const int train_options, const int game_options)
 {
 
@@ -58,8 +58,8 @@ int trainMode(int Q_tensor[][27][27][9], int8_t R_tensor[][27][27][2], const int
 	return 0;
 }
 
-int trainQTensor(const int8_t current_state[], int Q_tensor[][27][27][9],
-				 const int8_t R_tensor[][27][27][2], const float gamma, const int options)
+int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
+				 const int8_t R_tensor[][2], const float gamma, const int options)
 {
 	// choose next move randomly
 	int next_move = chooseRandomEmpty(current_state);
@@ -120,7 +120,7 @@ int trainQTensor(const int8_t current_state[], int Q_tensor[][27][27][9],
 	return next_move;
 }
 
-int chooseMaxQValue(const int8_t current_state[], const int Q_tensor[][27][27][9])
+int chooseMaxQValue(const int8_t current_state[], const int Q_tensor[][9])
 {
 	int Q_matrix[9];
 	resetMatrix(Q_matrix, sizeof(int));
@@ -141,7 +141,7 @@ int chooseMaxQValue(const int8_t current_state[], const int Q_tensor[][27][27][9
 	return max;
 }
 
-int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][27][27][9])
+int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][9])
 {
 	int Q_matrix[9];
 	resetMatrix(Q_matrix, sizeof(int));
@@ -163,7 +163,7 @@ int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][27][2
 	return sum / empty_count;
 }
 
-int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][2])
+int generateRTensor(int8_t current_state[], int8_t R_tensor[][2])
 {
 	int8_t R_value[2];
 	memset(R_value, 0, 2);
@@ -217,7 +217,7 @@ int generateRTensor(int8_t current_state[], int8_t R_tensor[][27][27][2])
 	return 0;
 }
 
-int simulateGame(const int8_t R_tensor[][27][27][2], int Q_tensor[][27][27][9], const float gamma,
+int simulateGame(const int8_t R_tensor[][2], int Q_tensor[][9], const float gamma,
 				 const int train_options, const int game_options)
 {
 	int8_t current_state[9] = {0};
@@ -236,7 +236,7 @@ int simulateGame(const int8_t R_tensor[][27][27][2], int Q_tensor[][27][27][9], 
 	}
 	else
 	{
-		// player move
+		// P1 move
 		next_move = trainQTensor(current_state, Q_tensor, R_tensor, gamma, train_options);
 		if(errnum)
 			return -1;
@@ -258,7 +258,7 @@ int simulateGame(const int8_t R_tensor[][27][27][2], int Q_tensor[][27][27][9], 
 		else if(errnum == EC_ETC)
 			return -1;
 
-		// opponent next move
+		// P2 next move
 		current_state[next_move] = P2;
 #ifdef DEBUG
 		move_count++;
@@ -302,33 +302,19 @@ void printResults(const int results[][3])
 }
 
 #ifdef DEBUG
-void printRTensor(const int8_t R_tensor[][27][27][2])
+void printRTensor(const int8_t R_tensor[][2])
 {
-	for(int i = 0; i < 27; i++)
-	{
-		for(int j = 0; j < 27; j++)
-		{
-			for(int k = 0; k < 27; k++)
-			{
-				if((int8_t)R_tensor[i][j][k][0] != -1)
-					printf("%d: %d\n", R_tensor[i][j][k][0], R_tensor[i][j][k][1]);
-			}
-		}
-	}
+	for(int i = 0; i < 19683; i++)
+		if((int8_t)R_tensor[i][0] != -1)
+			printf("%d: %d\n", R_tensor[i][0], R_tensor[i][1]);
 }
 
 void printUpdateCount()
 {
-	for(int i = 0; i < 27; i++)
+	for(int i = 0; i < 19683; i++)
 	{
-		for(int j = 0; j < 27; j++)
-		{
-			for(int k = 0; k < 27; k++)
-			{
-				if(Q_update_count[i][j][k] != 0)
-					printf("update counts: %d\n", Q_update_count[i][j][k]);
-			}
-		}
+		if(Q_update_count[i] != 0)
+			printf("update counts: %d\n", Q_update_count[i]);
 	}
 }
 #endif

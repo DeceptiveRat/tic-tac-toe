@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>
 
 #include "common.h"
 
@@ -68,100 +69,71 @@ bool isGameover(const int8_t current_state[], int8_t player)
 	return false;
 }
 
-void getRValue(const int8_t current_state[], const int8_t R_tensor[][27][27][2], int8_t result[])
+void getRValue(const int8_t current_state[], const int8_t R_tensor[][2], int8_t result[])
 {
 	int hash = getHash(current_state);
-	if((hash & 0xff000000) != 0x00)
+	if(hash >= 19683)
 	{
 		setErr(EC_HASH_FAIL);
 		return;
 	}
 
-	memcpy(result, R_tensor[hash >> 24][hash >> 16][hash >> 8], 2);
+	memcpy(result, R_tensor[hash], 2);
 	return;
 }
 
-void getQMatrix(const int8_t current_state[], const int Q_tensor[][27][27][9], int result[])
+void getQMatrix(const int8_t current_state[], const int Q_tensor[][9], int result[])
 {
 	int hash = getHash(current_state);
-	if((hash & 0xff000000) != 0x00)
+	if(hash >= 19683)
 	{
 		setErr(EC_HASH_FAIL);
 		return;
 	}
 
-	memcpy(result, Q_tensor[hash >> 24][hash >> 16][hash >> 8], 9 * sizeof(int));
+	memcpy(result, Q_tensor[hash], 9 * sizeof(int));
 	return;
 }
 
 int getHash(const int8_t current_state[])
 {
-	int8_t indices[4] = {0};
+	int hash = 0;
+	for(int i= 0;i<9;i++)
+		hash += (current_state[i] + 1)*(int)pow(3, i);
+	
+	return hash;
 
-	for(int i = 0; i < 3; i++)
-	{
-		for(int j = 0; j < 3; j++)
-		{
-			int8_t byte = current_state[3 * i + j];
-			byte += 1;
-
-			if(j == 0)
-				indices[i] += 3 * 3 * byte;
-			else if(j == 1)
-				indices[i] += 3 * byte;
-			else
-				indices[i] += byte;
-		}
-	}
-
-	return *(int *)(indices);
 }
 
-int unhash(const int *hash, int8_t return_value[])
+int unhash(const int *hash, int8_t state[])
 {
-	int8_t *indices;
-	indices = (int8_t *)(hash);
-	for(int i = 0; i < 3; i++)
-	{
-		int8_t byte;
-		byte = indices[i] / (3 * 3);
-		byte--;
-		return_value[i * 3] = byte;
-
-		byte = (indices[i] / 3) % 3;
-		byte--;
-		return_value[i * 3 + 1] = byte;
-
-		byte = indices[i] % 3;
-		byte--;
-		return_value[i * 3 + 2] = byte;
-	}
+	for(int i = 0;i<9;i++)
+		state[i] = (*hash/(int)pow(3, i))%3;
 
 	return 0;
 }
 
-void setRValue(const int8_t current_state[], int8_t R_tensor[][27][27][2], int8_t R_value[])
+void setRValue(const int8_t current_state[], int8_t R_tensor[][2], int8_t R_value[])
 {
 	int hash = getHash(current_state);
-	if((hash & 0xff000000) != 0x00)
+	if(hash >= 19683)
 	{
 		setErr(EC_HASH_FAIL);
 		return;
 	}
-	memcpy(R_tensor[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff], R_value, 2);
+	memcpy(R_tensor[hash], R_value, 2);
 	return;
 }
 
-void setQMatrix(const int8_t current_state[], int Q_tensor[][27][27][9], int Q_matrix[])
+void setQMatrix(const int8_t current_state[], int Q_tensor[][9], int Q_matrix[])
 {
 	int hash = getHash(current_state);
-	if((hash & 0xff000000) != 0x00)
+	if(hash >= 19683)
 	{
 		setErr(EC_HASH_FAIL);
 		return;
 	}
-	memcpy(Q_tensor[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff], Q_matrix,
-		   9 * sizeof(int));
+	memcpy(Q_tensor[hash], Q_matrix, 9 * sizeof(int));
 	return;
 }
 
@@ -177,31 +149,31 @@ void resetMatrix(void *matrix, int length) { memset(matrix, 0, 9 * length); }
 bool verifyGamma(const float gamma) { return ((gamma >= 0) && (gamma <= 1)) ? (true) : (false); }
 
 #ifdef DEBUG
-void addQCount(const int8_t current_state[], int Q_update_count[][27][27])
+void addQCount(const int8_t current_state[], int Q_update_count[])
 {
 	int hash = getHash(current_state);
-	if((hash & 0xff000000) != 0x00)
+	if(hash >= 19683)
 	{
 		setErr(EC_HASH_FAIL);
 		return;
 	}
-	Q_update_count[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff]++;
+	Q_update_count[hash]++;
 	return;
 }
 
-int getQCount(const int8_t current_state[], int Q_update_count[][27][27])
+int getQCount(const int8_t current_state[], int Q_update_count[])
 {
 	int hash = getHash(current_state);
-	if((hash & 0xff000000) != 0x00)
+	if(hash >= 19683)
 	{
 		setErr(EC_HASH_FAIL);
 		return -1;
 	}
-	return Q_update_count[(hash >> 16) & 0xff][(hash >> 8) & 0xff][(hash) & 0xff];
+	return Q_update_count[hash];
 }
 #endif
 
-int chooseMove(const int8_t current_state[], const int Q_tensor[][27][27][9])
+int chooseMove(const int8_t current_state[], const int Q_tensor[][9])
 {
 	int Q_matrix[9];
 	getQMatrix(current_state, Q_tensor, Q_matrix);
@@ -218,7 +190,7 @@ int chooseMove(const int8_t current_state[], const int Q_tensor[][27][27][9])
 	return max_index;
 }
 
-int playGame(const int Q_tensor[][27][27][9])
+int playGame(const int Q_tensor[][9])
 {
 	int8_t current_state[9] = {0};
 	int Q_matrix[9];
@@ -310,23 +282,17 @@ int chooseOptimalSpot(const int8_t current_state[9], const int Q_matrix[9])
 	return optimal_index;
 }
 
-void printQTensor(const int Q_tensor[][27][27][9])
+void printQTensor(const int Q_tensor[][9])
 {
-	for(int i = 0;i<27;i++)
+	for(int i = 0;i<19683;i++)
 	{
-		for(int j = 0;j<27;j++)
+		int empty[9] = {0};
+		int temp[9];
+		memcpy(temp, Q_tensor[i], 9*sizeof(int));
+		if(memcmp(empty, temp, 9*sizeof(int)) != 0)
 		{
-			for(int k = 0;k<27;k++)
-			{
-				int empty[9] = {0};
-				int temp[9];
-				memcpy(temp, Q_tensor[i][j][k], 9*sizeof(int));
-				if(memcmp(empty, temp, 9*sizeof(int)) != 0)
-				{
-					printf("===============================\n");
-					printf("%-3d %8d %8d\n%-3d %8d %8d\n%-3d %8d %8d\n", temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8]);
-				}
-			}
+			printf("===============================\n");
+			printf("%-3d %8d %8d\n%-3d %8d %8d\n%-3d %8d %8d\n", temp[0], temp[1], temp[2], temp[3], temp[4], temp[5], temp[6], temp[7], temp[8]);
 		}
 	}
 }

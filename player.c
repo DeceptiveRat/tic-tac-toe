@@ -15,10 +15,10 @@ extern int debug_mode;
 
 int main(int argc, char **argv)
 {
-	int8_t R_tensor[27][27][27][2];
-	int Q_tensor[27][27][27][9];
-	memset(R_tensor, 0xff, 27 * 27 * 27 * 2 * sizeof(int8_t));
-	memset(Q_tensor, 0, 27 * 27 * 27 * 9 * sizeof(int));
+	int8_t R_tensor[19683][2];
+	int Q_tensor[19683][9];
+	memset(R_tensor, 0xff, 19683 * 2 * sizeof(int8_t));
+	memset(Q_tensor, 0, 19683 * 9 * sizeof(int));
 
 	int opt;
 	int mode = 0;
