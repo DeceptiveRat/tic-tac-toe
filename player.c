@@ -87,7 +87,7 @@ int main(int argc, char **argv)
 		}
 	}
 
-	//DEBUG_EXEC(printQTensor(Q_tensor));
+	DEBUG_EXEC(printQTensor(Q_tensor));
 
 	if(load_tensors)
 	{

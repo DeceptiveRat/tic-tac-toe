@@ -53,8 +53,6 @@ int trainMode(int Q_tensor[][9], int8_t R_tensor[][2], const int train_iteration
 		simulateGame(R_tensor, Q_tensor, gamma, train_options, game_options);
 #endif
 	}
-	//DEBUG_EXEC(printUpdateCount());
-	//DEBUG_EXEC(printResults(results));
 
 	return 0;
 }
@@ -87,7 +85,7 @@ int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
 	if((options & TRAINQTENSOR_MODE) == TRAINQTENSOR_USEMAXQ)
 	{
 		// choose potential max reward if we make the move
-		int Q_max = chooseMaxQValue(next_state, Q_tensor);
+		int Q_max = chooseMaxQValue(next_state, Q_tensor, P1);
 		if(errnum)
 		{
 			if(errnum == E_TIE_DETECTED)
@@ -104,7 +102,7 @@ int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
 	else if((options & TRAINQTENSOR_MODE) == TRAINQTENSOR_USEAVGQ)
 	{
 		// choose average of potential reward if we make the move
-		int Q_avg = chooseAverageQValue(next_state, Q_tensor);
+		int Q_avg = chooseAverageQValue(next_state, Q_tensor, P1);
 		if(errnum)
 		{
 			if(errnum == E_TIE_DETECTED)
@@ -141,21 +139,8 @@ int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
 	return next_move;
 }
 
-int chooseMaxQValue(const int8_t current_state[], const int Q_tensor[][9])
+int getMaxQValue(const int8_t current_state[], const int Q_tensor[][9])
 {
-	// check for tie
-	int empty_count = 0;
-	for(int i = 0; i < 9; i++)
-	{
-		if(current_state[i] == 0)
-			empty_count++;
-	}
-	if(empty_count == 0)
-	{
-		setErr(E_TIE_DETECTED);
-		return -1;
-	}
-
 	int Q_matrix[9];
 	resetMatrix(Q_matrix, sizeof(int));
 	getQMatrix(current_state, Q_tensor, Q_matrix);
@@ -178,7 +163,7 @@ int chooseMaxQValue(const int8_t current_state[], const int Q_tensor[][9])
 	return max;
 }
 
-int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][9])
+int chooseMaxQValue(const int8_t current_state[], const int Q_tensor[][9], int turn)
 {
 	// check for tie
 	int empty_count = 0;
@@ -193,17 +178,61 @@ int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][9])
 		return -1;
 	}
 
-	int Q_matrix[9];
-	resetMatrix(Q_matrix, sizeof(int));
-	getQMatrix(current_state, Q_tensor, Q_matrix);
-	if(errnum)
-		return -1;
+	int8_t new_state[9];
+	memcpy(new_state, current_state, 9*sizeof(int8_t));
+	int opponent = 0 - turn;
+	int max = INT_MIN;
 
-	int sum = 0;
+	// find max for each move of opponent
+	for(int i =0;i<9;i++)
+	{
+		if(new_state[i] != 0)
+			continue;
+
+		new_state[i] = opponent;
+		int result = getMaxQValue(new_state, Q_tensor);
+		if(result > max)
+			max = result;
+		new_state[i] = 0;
+	}
+
+	return max;
+}
+
+int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][9], int turn)
+{
+	// check for tie
+	int empty_count = 0;
 	for(int i = 0; i < 9; i++)
-		sum += Q_matrix[i];
+	{
+		if(current_state[i] == 0)
+			empty_count++;
+	}
+	if(empty_count == 0)
+	{
+		setErr(E_TIE_DETECTED);
+		return -1;
+	}
 
-	return sum / empty_count;
+	int8_t new_state[9];
+	memcpy(new_state, current_state, 9*sizeof(int8_t));
+	int opponent = 0 - turn;
+	int sum = 0;
+	int count = 0;
+
+	// find max for each move of opponent
+	for(int i =0;i<9;i++)
+	{
+		if(new_state[i] != 0)
+			continue;
+
+		count++;
+		new_state[i] = opponent;
+		sum += getMaxQValue(new_state, Q_tensor);
+		new_state[i] = 0;
+	}
+
+	return sum/count;
 }
 
 int generateRTensor(int8_t current_state[], int8_t R_tensor[][2])
