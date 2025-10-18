@@ -24,13 +24,15 @@ int main(int argc, char **argv)
 	int mode = 0;
 	int train_iteration = 5;
 	float gamma = 0.5;
-	int Q_train_options = 0x01;
-	int train_options = 0x01;
+	int Q_train_options = 0;
+	Q_train_options &= TRAINQTENSOR_USEMAXQ;
+	int simulate_game_options = 0;
+	simulate_game_options &= SIMULATEGAME_RANDOMSTART;
 	srand(time(NULL));
 	bool save_tensors = false;
 	bool load_tensors = false;
 
-	while((opt = getopt(argc, argv, ":htc:g:mardsl")) != -1)
+	while((opt = getopt(argc, argv, ":htc:g:mardslop")) != -1)
 	{
 		switch(opt)
 		{
@@ -55,7 +57,8 @@ int main(int argc, char **argv)
 				Q_train_options |= TRAINQTENSOR_USEAVGQ;
 				break;
 			case 'r':
-				train_options |= SIMULATEGAME_RANDOMSTART;
+				simulate_game_options &= !SIMULATEGAME_OPTIONS;
+				simulate_game_options |= SIMULATEGAME_RANDOMSTART;
 				break;
 			case 'd':
 				debug_mode = 1;
@@ -65,6 +68,12 @@ int main(int argc, char **argv)
 				break;
 			case 'l':
 				load_tensors = true;
+				break;
+			case 'o':
+				simulate_game_options |= SIMULATEGAME_PLAYERP2;
+				break;
+			case 'p':
+				simulate_game_options |= SIMULATEGAME_PLAYERP1;
 				break;
 			case '?':
 				printf("unknown option: %c\n", optopt);
@@ -79,7 +88,7 @@ int main(int argc, char **argv)
 			printf("Gamma is between 0 and 1!\n");
 			return -1;
 		}
-		if(trainMode(Q_tensor, R_tensor, train_iteration, gamma, Q_train_options, train_options) == -1)
+		if(trainMode(Q_tensor, R_tensor, train_iteration, gamma, Q_train_options, simulate_game_options) == -1)
 		detectError();
 		
 		if(save_tensors)

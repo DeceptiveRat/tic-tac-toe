@@ -11,12 +11,6 @@
 extern int errnum;
 extern int debug_mode;
 
-#ifdef DEBUG
-int Q_update_count[19683] = {0};
-float avg_update_count = 0; // average number of updates chosen Q matrix has
-int temporary_update_count_sum = 0;
-#endif
-
 int trainMode(int Q_tensor[][9], int8_t R_tensor[][2], const int train_iteration,
 			  const float gamma, const int train_options, const int game_options)
 {
@@ -44,11 +38,6 @@ int trainMode(int Q_tensor[][9], int8_t R_tensor[][2], const int train_iteration
 			return -1;
 		else
 			results[i * SEGMENTS / train_iteration][result + 1]++;
-		if((i + 1) % (train_iteration / SEGMENTS) == 0)
-		{
-			DEBUG_PRINT("avg update count: %.3f\n", avg_update_count);
-			avg_update_count = 0;
-		}
 #else
 		simulateGame(R_tensor, Q_tensor, gamma, train_options, game_options);
 #endif
@@ -58,13 +47,15 @@ int trainMode(int Q_tensor[][9], int8_t R_tensor[][2], const int train_iteration
 }
 
 int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
-				 const int8_t R_tensor[][2], const float gamma, const int options)
+				 const int8_t R_tensor[][2], const float gamma, const int options, const int turn)
 {
 	// choose next move randomly
 	int next_move = chooseRandomEmpty(current_state);
+	if(errnum == E_TIE_DETECTED)
+		return -1;
 	int8_t next_state[9];
 	memcpy(next_state, current_state, 9 * sizeof(int8_t));
-	next_state[next_move] = P1;
+	next_state[next_move] = turn;
 
 	// get reward for next move
 	int8_t R_value[2];
@@ -85,7 +76,7 @@ int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
 	if((options & TRAINQTENSOR_MODE) == TRAINQTENSOR_USEMAXQ)
 	{
 		// choose potential max reward if we make the move
-		int Q_max = chooseMaxQValue(next_state, Q_tensor, P1);
+		int Q_max = chooseMaxQValue(next_state, Q_tensor, turn);
 		if(errnum)
 		{
 			if(errnum == E_TIE_DETECTED)
@@ -102,7 +93,7 @@ int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
 	else if((options & TRAINQTENSOR_MODE) == TRAINQTENSOR_USEAVGQ)
 	{
 		// choose average of potential reward if we make the move
-		int Q_avg = chooseAverageQValue(next_state, Q_tensor, P1);
+		int Q_avg = chooseAverageQValue(next_state, Q_tensor, turn);
 		if(errnum)
 		{
 			if(errnum == E_TIE_DETECTED)
@@ -121,13 +112,6 @@ int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
 	Q_matrix[next_move] = updated_Q_value;
 	setQMatrix(current_state, Q_tensor, Q_matrix);
 #ifdef DEBUG
-	if(debug_mode)
-	{
-		temporary_update_count_sum += getQCount(current_state, Q_update_count);
-		addQCount(current_state, Q_update_count);
-		if(errnum == EC_HASH_FAIL)
-			return -1;
-	}
 	if(!verifyQMatrix(current_state, Q_matrix))
 	{
 		setErr(EC_Q_MATRIX_ERROR);
@@ -233,7 +217,7 @@ int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][9], i
 	return sum/empty_count;
 }
 
-int generateRTensor(int8_t current_state[], int8_t R_tensor[][2], const int player)
+int generateRTensor(int8_t current_state[], int8_t R_tensor[][2], const int turn)
 {
 	int8_t R_value[2];
 	memset(R_value, 0, 2);
@@ -243,14 +227,14 @@ int generateRTensor(int8_t current_state[], int8_t R_tensor[][2], const int play
 			continue;
 
 		int reward = 0;
-		current_state[i] = player;
+		current_state[i] = turn;
 		// set reward
-		if(isGameover(current_state, player))
+		if(isGameover(current_state, turn))
 			reward = 100;
 		else
 		{
 			reward = 0;
-			generateRTensor(current_state, R_tensor, 0-player);
+			generateRTensor(current_state, R_tensor, 0-turn);
 		}
 
 		// revert state
@@ -275,65 +259,54 @@ int simulateGame(const int8_t R_tensor[][2], int Q_tensor[][9], const float gamm
 	int8_t current_state[9] = {0};
 	int next_move;
 	int return_value;
-#ifdef DEBUG
-	int move_count = 0;
-#endif
-	if((game_options & SIMULATEGAME_OPTIONS) == SIMULATEGAME_RANDOMSTART)
+	if(game_options & SIMULATEGAME_RANDOMSTART)
 	{
 		int r = rand() % 9;
 		current_state[r] = 1;
-#ifdef DEBUG
-		move_count++;
-#endif
 	}
 	else
 	{
 		// P1 move
-		next_move = trainQTensor(current_state, Q_tensor, R_tensor, gamma, train_options);
+		if(game_options & SIMULATEGAME_PLAYERP1)
+			next_move = trainQTensor(current_state, Q_tensor, R_tensor, gamma, train_options, P1);
+		else
+			next_move = chooseRandomEmpty(current_state);
 		if(errnum)
 			return -1;
 		current_state[next_move] = P1;
-#ifdef DEBUG
-		move_count++;
-#endif
 	}
 	while(1)
 	{
-		// check for tie
-		next_move = chooseRandomEmpty(current_state);
+		// P2 next move
+		if(game_options & SIMULATEGAME_PLAYERP2)
+			next_move = trainQTensor(current_state, Q_tensor, R_tensor, gamma, train_options, P2);
+		else
+			next_move = chooseRandomEmpty(current_state);
 		if(errnum == E_TIE_DETECTED)
 		{
 			resetErr();
 			return_value = 0;
 			break;
 		}
-		else if(errnum == EC_ETC)
-			return -1;
-
-		// P2 next move
 		current_state[next_move] = P2;
-#ifdef DEBUG
-		move_count++;
-#endif
 		if(isGameover(current_state, P2))
 			return_value = P2;
 
-		// player move
-		next_move = trainQTensor(current_state, Q_tensor, R_tensor, gamma, train_options);
-		if(errnum)
-			return -1;
+		// P1 move
+		if(game_options & SIMULATEGAME_PLAYERP1)
+			next_move = trainQTensor(current_state, Q_tensor, R_tensor, gamma, train_options, P1);
+		else
+			next_move = chooseRandomEmpty(current_state);
+		if(errnum == E_TIE_DETECTED)
+		{
+			resetErr();
+			return_value = 0;
+			break;
+		}
 		current_state[next_move] = P1;
-#ifdef DEBUG
-		move_count++;
-#endif
 		if(isGameover(current_state, P1))
 			return_value = P1;
 	}
-
-#ifdef DEBUG
-	avg_update_count += (float)temporary_update_count_sum / move_count;
-	temporary_update_count_sum = 0;
-#endif
 
 	return return_value;
 }
@@ -359,14 +332,5 @@ void printRTensor(const int8_t R_tensor[][2])
 	for(int i = 0; i < 19683; i++)
 		if((int8_t)R_tensor[i][0] != -1)
 			printf("%d: %d\n", R_tensor[i][0], R_tensor[i][1]);
-}
-
-void printUpdateCount()
-{
-	for(int i = 0; i < 19683; i++)
-	{
-		if(Q_update_count[i] != 0)
-			printf("update counts: %d\n", Q_update_count[i]);
-	}
 }
 #endif

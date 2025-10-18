@@ -50,6 +50,8 @@ void printHelp(const char *argv)
 		   "game options!)\n");
 	printf("-s: save trained tensors (file names: %s, %s)\n", QFILE, RFILE);
 	printf("-l: load trained tensors (file names: %s, %s)\n", QFILE, RFILE);
+	printf("-p: train player 2 (can be used with -o)\n");
+	printf("-o: train player 2 (can be used with -p)\n");
 }
 
 bool isGameover(const int8_t current_state[], int8_t player)
