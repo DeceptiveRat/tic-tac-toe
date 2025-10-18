@@ -47,9 +47,11 @@ int main(int argc, char **argv)
 			case 'g':
 				gamma = atof(optarg);
 			case 'm':
+				Q_train_options &= !TRAINQTENSOR_MODE;
 				Q_train_options |= TRAINQTENSOR_USEMAXQ;
 				break;
 			case 'a':
+				Q_train_options &= !TRAINQTENSOR_MODE;
 				Q_train_options |= TRAINQTENSOR_USEAVGQ;
 				break;
 			case 'r':

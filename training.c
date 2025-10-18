@@ -24,13 +24,13 @@ int trainMode(int Q_tensor[][9], int8_t R_tensor[][2], const int train_iteration
 	int8_t current_state[9] = {0};
 	// create R tensor
 #ifdef DEBUG
-	if(generateRTensor(current_state, R_tensor) == -1)
+	if(generateRTensor(current_state, R_tensor, P1) == -1)
 	{
 		printf("error generating R tensor\n");
 		exit(-1);
 	}
 #else
-	generateRTensor(current_state, R_tensor);
+	generateRTensor(current_state, R_tensor, P1);
 #endif
 
 	int results[SEGMENTS][3];
@@ -218,7 +218,6 @@ int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][9], i
 	memcpy(new_state, current_state, 9*sizeof(int8_t));
 	int opponent = 0 - turn;
 	int sum = 0;
-	int count = 0;
 
 	// find max for each move of opponent
 	for(int i =0;i<9;i++)
@@ -226,16 +225,15 @@ int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][9], i
 		if(new_state[i] != 0)
 			continue;
 
-		count++;
 		new_state[i] = opponent;
 		sum += getMaxQValue(new_state, Q_tensor);
 		new_state[i] = 0;
 	}
 
-	return sum/count;
+	return sum/empty_count;
 }
 
-int generateRTensor(int8_t current_state[], int8_t R_tensor[][2])
+int generateRTensor(int8_t current_state[], int8_t R_tensor[][2], const int player)
 {
 	int8_t R_value[2];
 	memset(R_value, 0, 2);
@@ -243,47 +241,29 @@ int generateRTensor(int8_t current_state[], int8_t R_tensor[][2])
 	{
 		if(current_state[i] != 0)
 			continue;
+
+		int reward = 0;
+		current_state[i] = player;
+		// set reward
+		if(isGameover(current_state, player))
+			reward = 100;
 		else
 		{
-			int reward = 0;
-			current_state[i] = P1;
-			// set reward
-			if(isGameover(current_state, P1))
-				reward = 100;
-			// set penalty
-			else
-			{
-				int branch_count = 0;
-				for(int j = 0; j < 9; j++)
-				{
-					if(current_state[j] != 0)
-						continue;
-					else
-					{
-						branch_count++;
-						current_state[j] = P2;
-						if(isGameover(current_state, P2))
-							reward -= 100;
-						else
-							generateRTensor(current_state, R_tensor);
-						current_state[j] = 0;
-					}
-				}
-				if(reward != 0)
-					reward /= branch_count;
-			}
-
-			// save value
-			current_state[i] = 0;
-			R_value[0] = i;
-			R_value[1] = reward;
-			setRValue(current_state, R_tensor, R_value);
-			if(errnum)
-				return -1;
-
-			// reset matrices
-			memset(R_value, 0, 2);
+			reward = 0;
+			generateRTensor(current_state, R_tensor, 0-player);
 		}
+
+		// revert state
+		current_state[i] = 0;
+		// save value
+		R_value[0] = i;
+		R_value[1] = reward;
+		setRValue(current_state, R_tensor, R_value);
+		if(errnum)
+			return -1;
+
+		// reset matrices
+		memset(R_value, 0, 2);
 	}
 
 	return 0;

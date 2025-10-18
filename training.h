@@ -20,7 +20,7 @@ int trainMode(int Q_tensor[][9], int8_t R_tensor[][2], const int train_iteration
 			  const float gamma, const int train_options, const int game_options);
 int trainQTensor(const int8_t current_state[], int Q_tensor[][9],
 				 const int8_t R_tensor[][2], const float gamma, const int options);
-int generateRTensor(int8_t current_state[], int8_t R_tensor[][2]);
+int generateRTensor(int8_t current_state[], int8_t R_tensor[][2], const int player);
 int chooseMaxQValue(const int8_t current_state[], const int Q_tensor[][9], int turn);
 int chooseAverageQValue(const int8_t current_state[], const int Q_tensor[][9], int turn);
 int simulateGame(const int8_t R_tensor[][2], int Q_tensor[][9], const float gamma,
