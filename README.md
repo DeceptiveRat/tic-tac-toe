@@ -1,2 +1,2 @@
 # tic-tac-toe
-Use reinforcement learning to create optimized tic tac toe AI
+Q learning proof of concept. Model to play tic tac toe
